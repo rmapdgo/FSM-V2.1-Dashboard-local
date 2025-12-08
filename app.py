@@ -58,16 +58,16 @@ app = dash.Dash(__name__, suppress_callback_exceptions=True)
 server = app.server
 
 # AWS S3 client setup
-s3 = boto3.client('s3',
-    aws_access_key_id='AKIAT64DSU55EBYQBKGM',
-    aws_secret_access_key='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'
+s3 = boto3.client('****',
+    aws_access_key_id='***',
+    aws_secret_access_key='****'
 )
 
 # Bucket mapping
 bucket_map = {
-    'upload-raw': 'fsm-v2.1-raw-intensity-data',
-    'upload-concentration': 'fsm-v2.1-concentrations-data',
-    'upload-ctg': 'fsm-v2.1-ctg-data'
+    'upload-raw': '***',
+    'upload-concentration':'***',
+    'upload-ctg': '***'
 }
 
 # Upload modal component
