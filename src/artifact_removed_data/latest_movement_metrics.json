@@ -1,0 +1,11 @@
+{
+  "Total_Time_sec": 974.757634,
+  "Movement_Time_samples": 209,
+  "Movement_Percentage": 1.4484718275694781,
+  "SNR_Before_LED_A_Detector_1 + LED_B_Detector_3": 167.80294438313297,
+  "SNR_Before_LED_A_Detector_2 + LED_B_Detector_2": 50.770575618967776,
+  "SNR_Before_LED_A_Detector_3 + LED_B_Detector_1": 15.363779555697265,
+  "SNR_After_LED_A_Detector_1 + LED_B_Detector_3": 167.7973474424317,
+  "SNR_After_LED_A_Detector_2 + LED_B_Detector_2": 50.775006061348336,
+  "SNR_After_LED_A_Detector_3 + LED_B_Detector_1": 15.36238830631738
+}
