@@ -3409,9 +3409,9 @@ def download_resampled_concentration_excel(n_clicks, conc_data):
 
 # ======================= Bucket Mapping =========================
 bucket_map = {
-    'upload-raw': 'fsm-v2.1-raw-intensity-data',
-    'upload-concentration': 'fsm-v2.1-concentrations-data',
-    'upload-ctg': 'fsm-v2.1-ctg-data'
+    'upload-raw': '***',
+    'upload-concentration': '***',
+    'upload-ctg': '***',
 }
 
 # ======================= Modal Visibility Toggle =========================
