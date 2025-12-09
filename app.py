@@ -56,13 +56,13 @@ import h5py
 # Create the Dash app
 app = dash.Dash(__name__, suppress_callback_exceptions=True)
 server = app.server
-
+"""
 # AWS S3 client setup
 s3 = boto3.client('****',
     aws_access_key_id='***',
     aws_secret_access_key='****'
 )
-
+"""
 # Bucket mapping
 bucket_map = {
     'upload-raw': '***',
@@ -3236,6 +3236,40 @@ def generate_concentration_excel(
         if not data:
             return 0
         return np.std(np.concatenate(data))
+    
+    # ---- Fixed: cal_saturation accepts the dataframe 'df_param' and we call it with the outer 'df' ----
+    def cal_saturation(df_param, threshold=2.88):
+        LED_A_DET_1 = [
+            'LED_A_782_DET1', 'LED_A_801_DET1', 'LED_A_808_DET1',
+            'LED_A_828_DET1', 'LED_A_848_DET1', 'LED_A_887_DET1'
+        ]
+        LED_B_DET_3 = [
+            'LED_B_782_DET3', 'LED_B_801_DET3', 'LED_B_808_DET3',
+            'LED_B_828_DET3', 'LED_B_848_DET3', 'LED_B_887_DET3'
+        ]
+
+        # Keep only columns that actually exist in the dataframe
+        LED_A_channels = [ch for ch in LED_A_DET_1 if ch in df_param.columns]
+        LED_B_channels = [ch for ch in LED_B_DET_3 if ch in df_param.columns]
+
+        LED_A_saturation = {}
+        LED_B_saturation = {}
+
+        # Calculate saturation for LED A
+        for ch in LED_A_channels:
+            series = df_param[ch].dropna()
+            LED_A_saturation[ch] = (np.sum(series > threshold) / len(series)) * 100 if len(series) > 0 else 0.0
+
+        # Calculate saturation for LED B
+        for ch in LED_B_channels:
+            series = df_param[ch].dropna()
+            LED_B_saturation[ch] = (np.sum(series > threshold) / len(series)) * 100 if len(series) > 0 else 0.0
+
+        # Compute averages (guard for empty dict)
+        avg_LED_A = float(np.mean(list(LED_A_saturation.values()))) if LED_A_saturation else 0.0
+        avg_LED_B = float(np.mean(list(LED_B_saturation.values()))) if LED_B_saturation else 0.0
+
+        return avg_LED_A, avg_LED_B
 
     # --- Compute NEP and SNR ---
     snr_short = calculate_group_snr([
@@ -3254,6 +3288,9 @@ def generate_concentration_excel(
     nep_2 = calculate_nep(['LED_A_DARK_DET2', 'LED_B_DARK_DET2'])
     nep_3 = calculate_nep(['LED_A_DARK_DET3', 'LED_B_DARK_DET3'])
 
+    # ---- CALL cal_saturation with the correct dataframe variable 'df' ----
+    avg_LED_A, avg_LED_B = cal_saturation(df)
+
     # --- SNR / NEP summary DataFrame ---
     summary_df = pd.DataFrame([
         ["Resampling", resample_note],
@@ -3263,6 +3300,8 @@ def generate_concentration_excel(
         ["SNR Short Channel Average", round(snr_short, 4)],
         ["SNR Mid Channel Average", round(snr_mid, 4)],
         ["SNR Long Channel Average", round(snr_long, 4)],
+        ["LED A Saturation (%)", round(avg_LED_A, 2)],
+        ["LED B Saturation (%)", round(avg_LED_B, 2)]
     ], columns=["Metric", "Value"])
 
     # --- Filter & rename movement metrics ---
@@ -3281,7 +3320,6 @@ def generate_concentration_excel(
                 movement_rows.append([new_name, movement_metrics[key]])
     if movement_rows:
         movement_df = pd.DataFrame(movement_rows, columns=["Metric", "Value"])
-        # Append to summary
         summary_df = pd.concat([summary_df, movement_df], ignore_index=True)
 
     # --- Rename concentration columns ---
@@ -3301,14 +3339,15 @@ def generate_concentration_excel(
         conc_b_1_df, conc_b_2_df, conc_b_3_df,
         df_sto2_A, df_sto2_B, df_sto2_dual
     ], axis=1)
+
+    # Ensure df has 'Time' column; if not, create placeholder
+    time_col = df["Time"] if "Time" in df.columns else pd.Series(index=df.index, name="Time", data=np.arange(len(df)))
     result_df.insert(0, "Date", date)
-    result_df.insert(1, "Time", df["Time"])
+    result_df.insert(1, "Time", time_col.values)
 
     # --- Write to Excel ---
     with pd.ExcelWriter(output_path, engine='xlsxwriter') as writer:
-        # Write summary with header
         summary_df.to_excel(writer, index=False, sheet_name='concentration', startrow=0, header=True)
-        # Correct offset: len(summary_df) + 1 for header row
         offset = len(summary_df) + 1
         result_df.to_excel(writer, index=False, sheet_name='concentration', startrow=offset)
 
@@ -3334,75 +3373,69 @@ def download_concentration_excel(n_clicks, conc_data):
 @app.callback(
     Output("download-resampled-conc-xlsx", "data"),
     Input("download_resampled_concentrations_btn", "n_clicks"),
-    State("concentrations", "data"),  # Use saved data
+    State("concentrations", "data"),
     prevent_initial_call=True
 )
 def download_resampled_concentration_excel(n_clicks, conc_data):
     if not n_clicks or not conc_data or "excel_path" not in conc_data:
         raise PreventUpdate
-    
+
     excel_path = conc_data["excel_path"]
+
     if not os.path.exists(excel_path):
-        return html.Div("❌ Excel file not found for download.")
-    
+        # DO NOT return HTML — stop the callback
+        raise PreventUpdate
+
     try:
         # Read header rows (0–13)
         header_part = pd.read_excel(excel_path, header=None, nrows=14)
-        
-        # Update the resampling status in row 2, column 2 (index [1, 1])
+
+        # Update the resampling status
         header_part.iloc[1, 1] = "Resampled 1Hz"
-        
-        # Read data starting from row 15 (header row index = 14)
+
+        # Read the rest of the file
         df = pd.read_excel(excel_path, header=14)
-        
-        # Identify Date and Time columns
-        date_col, time_col = None, None
-        for col in df.columns:
-            name = str(col).lower()
-            if "date" in name:
-                date_col = col
-            elif "time" in name:
-                time_col = col
-        
+
+        # Locate Date and Time columns
+        date_col = next((c for c in df.columns if "date" in str(c).lower()), None)
+        time_col = next((c for c in df.columns if "time" in str(c).lower()), None)
+
         if date_col is None or time_col is None:
-            return html.Div("❌ Missing 'Date' or 'Time' column in Excel file.")
-        
-        # Combine Date and Time into a single datetime column
+            raise PreventUpdate  # <-- FIX
+
+        # Merge into datetime
         df["DateTime"] = pd.to_datetime(
             df[date_col].astype(str) + " " + df[time_col].astype(str),
             errors="coerce"
-        )
-        df = df.dropna(subset=["DateTime"])
-        
-        if df.empty:
-            return html.Div("❌ No valid datetime data in Excel file.")
-        
-        # Group by second (ignore milliseconds)
+        ).dropna()
+
+        if df["DateTime"].empty:
+            raise PreventUpdate  # <-- FIX
+
+        # Resample by second
         df["Time_Second"] = df["DateTime"].dt.floor("S")
         df_grouped = df.groupby("Time_Second").mean(numeric_only=True).reset_index()
-        
-        # Split DateTime back into separate Date and Time columns
+
         df_grouped["Date"] = df_grouped["Time_Second"].dt.date
         df_grouped["Time"] = df_grouped["Time_Second"].dt.time
-        df_grouped = df_grouped.drop(columns=["Time_Second"])
-        
-        # Reorder columns to match original order (Date, Time first)
-        cols = ["Date", "Time"] + [col for col in df_grouped.columns if col not in ["Date", "Time"]]
+        df_grouped.drop(columns=["Time_Second"], inplace=True)
+
+        # Reorder
+        cols = ["Date", "Time"] + [c for c in df_grouped.columns if c not in ["Date", "Time"]]
         df_grouped = df_grouped[cols]
-        
-        # Create temporary resampled file
+
+        # Save resampled Excel
         resampled_path = excel_path.replace(".xlsx", "_resampled.xlsx")
-        
+
         with pd.ExcelWriter(resampled_path, engine="openpyxl") as writer:
-            # Write header rows first
             header_part.to_excel(writer, index=False, header=False)
-            # Then write resampled data immediately after
             df_grouped.to_excel(writer, index=False, startrow=14)
-        
+
         return dcc.send_file(resampled_path)
-    
-    except Exception as e:
-        return html.Div(f"❌ Error resampling file: {str(e)}")
+
+    except Exception:
+        # DO NOT return HTML here — stop the download callback instead
+        raise PreventUpdate
 
 #=======================Upload to cloud========================================
 # AWS S3 client setup
