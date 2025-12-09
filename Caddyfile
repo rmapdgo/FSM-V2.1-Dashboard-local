@@ -1,3 +1,0 @@
-:80 {
-    reverse_proxy dash-app:8050
-}
