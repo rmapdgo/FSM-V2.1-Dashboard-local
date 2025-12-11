@@ -3300,8 +3300,8 @@ def generate_concentration_excel(
         ["SNR Short Channel Average", round(snr_short, 4)],
         ["SNR Mid Channel Average", round(snr_mid, 4)],
         ["SNR Long Channel Average", round(snr_long, 4)],
-        ["LED A Saturation (%)", round(avg_LED_A, 2)],
-        ["LED B Saturation (%)", round(avg_LED_B, 2)]
+        ["LED_A DET_1 Average Saturation (%)", round(avg_LED_A, 2)],
+        ["LED_B DET_3 Average Saturation (%)", round(avg_LED_B, 2)]
     ], columns=["Metric", "Value"])
 
     # --- Filter & rename movement metrics ---
@@ -3374,28 +3374,28 @@ def download_concentration_excel(n_clicks, conc_data):
 @app.callback(
     Output("download-resampled-conc-xlsx", "data"),
     Input("download_resampled_concentrations_btn", "n_clicks"),
-    State("concentrations", "data"),  # Use saved data
+    State("concentrations", "data"),
     prevent_initial_call=True
 )
 def download_resampled_concentration_excel(n_clicks, conc_data):
     if not n_clicks or not conc_data or "excel_path" not in conc_data:
         raise PreventUpdate
-    
+
     excel_path = conc_data["excel_path"]
     if not os.path.exists(excel_path):
         return html.Div("❌ Excel file not found for download.")
-    
+
     try:
-        # Read header rows (0–15)
+        # --- Read header rows 0–15 ---
         header_part = pd.read_excel(excel_path, header=None, nrows=16)
-        
-        # Update the resampling status in row 2, column 2 (index [1, 1])
+
+        # Update "Resampled 1Hz" flag
         header_part.iloc[1, 1] = "Resampled 1Hz"
-        
-        # Read data starting from row 15 (header row index = 16)
+
+        # --- Read data starting from row 17 (index 16) ---
         df = pd.read_excel(excel_path, header=16)
-        
-        # Identify Date and Time columns
+
+        # --- Identify Date and Time columns ---
         date_col, time_col = None, None
         for col in df.columns:
             name = str(col).lower()
@@ -3403,48 +3403,48 @@ def download_resampled_concentration_excel(n_clicks, conc_data):
                 date_col = col
             elif "time" in name:
                 time_col = col
-        
+
         if date_col is None or time_col is None:
             return html.Div("❌ Missing 'Date' or 'Time' column in Excel file.")
-        
-        # Combine Date and Time into a single datetime column
+
+        # --- Combine Date + Time ---
         df["DateTime"] = pd.to_datetime(
             df[date_col].astype(str) + " " + df[time_col].astype(str),
             errors="coerce"
         )
         df = df.dropna(subset=["DateTime"])
-        
+
         if df.empty:
             return html.Div("❌ No valid datetime data in Excel file.")
-        
-        # Group by second (ignore milliseconds)
+
+        # --- Group to 1 Hz (one record per second) ---
         df["Time_Second"] = df["DateTime"].dt.floor("S")
         df_grouped = df.groupby("Time_Second").mean(numeric_only=True).reset_index()
-        
-        # Split DateTime back into separate Date and Time columns
+
+        # --- Split into Date and Time ---
         df_grouped["Date"] = df_grouped["Time_Second"].dt.date
         df_grouped["Time"] = df_grouped["Time_Second"].dt.time
         df_grouped = df_grouped.drop(columns=["Time_Second"])
-        
-        # Reorder columns to match original order (Date, Time first)
-        cols = ["Date", "Time"] + [col for col in df_grouped.columns if col not in ["Date", "Time"]]
+
+        # --- Force stable formatting ---
+        df_grouped["Date"] = df_grouped["Date"].apply(lambda x: x.strftime("%Y/%d/%m"))
+        df_grouped["Time"] = df_grouped["Time"].apply(lambda x: x.strftime("%H:%M:%S"))
+
+        # --- Reorder columns (Date, Time first) ---
+        cols = ["Date", "Time"] + [c for c in df_grouped.columns if c not in ["Date", "Time"]]
         df_grouped = df_grouped[cols]
-        
-        # Create temporary resampled file
+
+        # --- Save temp resampled file ---
         resampled_path = excel_path.replace(".xlsx", "_resampled.xlsx")
-        
+
         with pd.ExcelWriter(resampled_path, engine="openpyxl") as writer:
-            # Write header rows first
             header_part.to_excel(writer, index=False, header=False)
-            # Then write resampled data immediately after
-            df_grouped.to_excel(writer, index=False, startrow=14)
-        
+            df_grouped.to_excel(writer, index=False, startrow=16)
+
         return dcc.send_file(resampled_path)
-    
+
     except Exception as e:
         return html.Div(f"❌ Error resampling file: {str(e)}")
-
-
 
 #=======================Upload to cloud========================================
 # AWS S3 client setup

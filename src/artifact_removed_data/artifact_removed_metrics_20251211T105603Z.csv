@@ -1,0 +1,2 @@
+Total_Time_sec,Movement_Time_samples,Movement_Percentage,SNR_Before_LED_A_Detector_1 + LED_B_Detector_3,SNR_Before_LED_A_Detector_2 + LED_B_Detector_2,SNR_Before_LED_A_Detector_3 + LED_B_Detector_1,SNR_After_LED_A_Detector_1 + LED_B_Detector_3,SNR_After_LED_A_Detector_2 + LED_B_Detector_2,SNR_After_LED_A_Detector_3 + LED_B_Detector_1
+1635.774716,355,1.9921436588103254,107.70000948895789,25.361802875738437,7.3044496661985,107.70070976199032,25.361504301049184,7.304065198216867

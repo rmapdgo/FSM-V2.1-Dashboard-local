@@ -328,7 +328,7 @@ def data_quality_check(data, selected_dropdown):
     gauge_fig = make_subplots(
         rows=1, cols=2,
         specs=[[{"type": "indicator"}, {"type": "indicator"}]],
-        subplot_titles=("Average LED A Saturation", "Average LED B Saturation")
+        subplot_titles=("Average LED A DET1 Saturation", "Average LED B DET3 Saturation")
     )
 
     # LED A Gauge
